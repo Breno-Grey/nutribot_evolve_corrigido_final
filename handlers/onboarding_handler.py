@@ -254,6 +254,7 @@ Use /ajuda para ver todos os comandos disponíveis.
                         return "Por favor, informe uma idade válida entre 12 e 120 anos."
                     
                     ConversationManager.update_context(user_id, {'age': age})
+                    context_data['age'] = age # Atualiza o contexto local
                     ConversationManager.set_state(user_id, ConversationManager.STATES['WAITING_GENDER'], context_data)
                     
                     # Retorna a mensagem solicitando o gênero
@@ -276,6 +277,7 @@ Use /ajuda para ver todos os comandos disponíveis.
                     gender = 'feminino'
                 
                 ConversationManager.update_context(user_id, {'gender': gender})
+                context_data['gender'] = gender # Atualiza o contexto local
                 ConversationManager.set_state(user_id, ConversationManager.STATES['WAITING_WEIGHT'], context_data)
                 
                 # Retorna a mensagem solicitando o peso
@@ -289,6 +291,7 @@ Use /ajuda para ver todos os comandos disponíveis.
                         return "Por favor, informe um peso válido entre 30 e 300 kg."
                     
                     ConversationManager.update_context(user_id, {'weight': weight})
+                    context_data['weight'] = weight # Atualiza o contexto local
                     ConversationManager.set_state(user_id, ConversationManager.STATES['WAITING_HEIGHT'], context_data)
                     
                     # Retorna a mensagem solicitando a altura
@@ -305,6 +308,7 @@ Use /ajuda para ver todos os comandos disponíveis.
                         return "Por favor, informe uma altura válida entre 100 e 250 cm."
                     
                     ConversationManager.update_context(user_id, {'height': height})
+                    context_data['height'] = height # Atualiza o contexto local
                     ConversationManager.set_state(user_id, ConversationManager.STATES['WAITING_ACTIVITY'], context_data)
                     
                     # Retorna a mensagem solicitando o nível de atividade
@@ -320,6 +324,7 @@ Use /ajuda para ver todos os comandos disponíveis.
                 
                 activity = OnboardingHandler.ACTIVITY_MAPPING[message_text]
                 ConversationManager.update_context(user_id, {'activity_level': activity})
+                context_data['activity_level'] = activity # Atualiza o contexto local
                 ConversationManager.set_state(user_id, ConversationManager.STATES['WAITING_GOAL'], context_data)
                 
                 # Retorna a mensagem solicitando o objetivo
@@ -332,6 +337,7 @@ Use /ajuda para ver todos os comandos disponíveis.
                 
                 goal = OnboardingHandler.GOAL_MAPPING[message_text]
                 ConversationManager.update_context(user_id, {'goal': goal})
+                context_data['goal'] = goal # Atualiza o contexto local
                 ConversationManager.set_state(user_id, ConversationManager.STATES['WAITING_DIET_TYPE'], context_data)
                 
                 # Retorna a mensagem solicitando o tipo de dieta
@@ -395,6 +401,12 @@ Use /ajuda para ver todos os comandos disponíveis.
             
             print(f"Dados de calorias calculados: {calorie_data}")
             
+            # Extrai dados de macros
+            macros = calorie_data.get('macros', {})
+            protein = macros.get('protein')
+            carbs = macros.get('carbs')
+            fat = macros.get('fat')
+
             # Atualiza os dados do usuário no banco de dados
             user_data = {
                 'full_name': context_data['name'],
@@ -405,54 +417,39 @@ Use /ajuda para ver todos os comandos disponíveis.
                 'activity_level': context_data['activity_level'],
                 'goal': context_data['goal'],
                 'diet_type': context_data['diet_type'],
-                'daily_calories': calorie_data['daily_calories'],
-                'onboarding_complete': 1
+                'daily_calories': calorie_data.get('daily_calories'),
+                'protein_goal': protein,
+                'carb_goal': carbs,
+                'fat_goal': fat,
+                'bmr': calorie_data.get('bmr'),
+                'tdee': calorie_data.get('tdee'),
+                'onboarding_completed': True
             }
+            UserRepository.update_user(user_id, user_data)
             
-            update_result = UserRepository.update_user(user_id, user_data)
-            print(f"Resultado da atualização do usuário: {update_result}")
-            
-            # Mapeia os valores para exibição
-            activity_display = {
-                'sedentario': 'Sedentário',
-                'leve': 'Leve',
-                'moderado': 'Moderado',
-                'ativo': 'Ativo',
-                'muito_ativo': 'Muito ativo'
-            }
-            
-            goal_display = {
-                'emagrecer': 'Emagrecer',
-                'manter': 'Manter o peso',
-                'ganhar_massa': 'Ganhar massa muscular'
-            }
-            
-            diet_display = {
-                'flexivel': 'Flexível',
-                'low_carb': 'Low Carb',
-                'cetogenica': 'Cetogênica',
-                'vegetariana': 'Vegetariana',
-                'vegana': 'Vegana'
-            }
-            
-            # Retorna a mensagem de conclusão
-            return OnboardingHandler.MESSAGES['completion'].format(
+            # Formata a mensagem de conclusão
+            # Adiciona uma verificação para garantir que os valores de macro existem antes de arredondar
+            completion_message = OnboardingHandler.MESSAGES['completion'].format(
                 name=context_data['name'],
                 age=context_data['age'],
                 gender=context_data['gender'].capitalize(),
                 weight=context_data['weight'],
                 height=context_data['height'],
-                activity=activity_display.get(context_data['activity_level'], 'Desconhecido'),
-                goal=goal_display.get(context_data['goal'], 'Desconhecido'),
-                diet_type=diet_display.get(context_data['diet_type'], 'Desconhecido'),
-                bmr=round(calorie_data['bmr']),
-                tdee=round(calorie_data['tdee']),
-                daily_calories=round(calorie_data['daily_calories']),
-                protein=round(calorie_data['macros']['protein']),
-                carbs=round(calorie_data['macros']['carbs']),
-                fat=round(calorie_data['macros']['fat'])
+                activity=context_data['activity_level'].replace('_', ' ').capitalize(),
+                goal=context_data['goal'].replace('_', ' ').capitalize(),
+                diet_type=context_data['diet_type'].replace('_', ' ').capitalize(),
+                bmr=round(calorie_data['bmr']) if calorie_data.get('bmr') is not None else 'N/A',
+                tdee=round(calorie_data['tdee']) if calorie_data.get('tdee') is not None else 'N/A',
+                daily_calories=round(calorie_data['daily_calories']) if calorie_data.get('daily_calories') is not None else 'N/A',
+                protein=round(protein) if protein is not None else 'N/A',
+                carbs=round(carbs) if carbs is not None else 'N/A',
+                fat=round(fat) if fat is not None else 'N/A'
             )
+            
+            return completion_message
+            
         except Exception as e:
             print(f"Erro em complete_onboarding: {e}")
             traceback.print_exc()
-            return "Ocorreu um erro ao finalizar seu cadastro. Por favor, use /iniciar para recomeçar."
+            return "Ocorreu um erro ao finalizar seu cadastro. Por favor, tente novamente ou contate o suporte."
+
